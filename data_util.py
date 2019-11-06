@@ -2,8 +2,11 @@ import numpy as np
 import math
 import pymesh
 import glob
+import os
+from tqdm import tqdm
 from pyntcloud import PyntCloud
 import matplotlib.pyplot as plt
+from nltk.corpus import wordnet as wn
 
 def compute_area(vertices, faces):
     """ Area of triangles: A = 0.5 * |AB||AC|sin(a)
@@ -79,14 +82,19 @@ def datalist_pc():
     for mesh_file in glob.glob(MODEL_PATHS):
         mesh = pymesh.load_mesh(mesh_file)
         pc = sample_cloud(mesh, n=256)
-        yield pc
 
-for pc in datalist_pc():
-    pass
-# mesh = pymesh.load_mesh("test_model/models/model_normalized.obj")
-# print(mesh.vertices.shape, mesh.faces.shape)
-# pymesh.save_mesh("test_model.ply", mesh)
-# mesh = PyntCloud.from_file("test_model.ply")
-# mesh.plot(mesh=True)
-# sample_cloud(mesh)
-# sample_cloud(mesh, n=256)
+        items = mesh_file.split('/')
+        synset_id = items[2]
+        model_id = items[3] 
+
+        yield pc, synset_id, model_id
+
+def synset_to_name(offset):
+    synset = wn.synset_from_pos_and_offset('n', offset)
+    return synset.name().split('.')[0]
+    
+# for pc, syn_id, model_id in tqdm(datalist_pc()):
+#     save_path = "./shapenet/%s/%s/models/model_normalized_256.npy" % (syn_id, model_id)
+#     if os.path.exists(save_path):
+#         continue
+#     np.save(save_path, pc)
