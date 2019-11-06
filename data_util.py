@@ -1,6 +1,7 @@
 import numpy as np
 import math
 import pymesh
+import glob
 from pyntcloud import PyntCloud
 import matplotlib.pyplot as plt
 
@@ -23,9 +24,14 @@ def compute_area(vertices, faces):
         AC = C - A
         dAB = np.linalg.norm(AB)
         dAC = np.linalg.norm(AC)
-        a = math.acos(min([max([AB.dot(AC) / (dAB * dAC), -1.]), 1.]))
+    
+        # Check for divide by zero if one vector is 0
+        if dAB * dAC < 1e-7:
+            R[i] = 0.
 
-        R[i] = 0.5 * dAC * dAC * np.sin(a)
+        else:
+            a = np.arccos(min([max([AB.dot(AC) / (dAB * dAC), -1.]), 1.]))
+            R[i] = 0.5 * dAC * dAC * np.sin(a)
 
     return R
 
@@ -42,7 +48,7 @@ def sample_cloud(mesh, n=100):
     # Sample faces based on area
     A = compute_area(mesh.vertices, mesh.faces)
     A = A / np.sum(A)
-    face_samples = mesh.faces[ np.random.choice(M, size=n, p=A)]
+    face_samples = mesh.faces[np.random.choice(M, size=n, p=A)]
 
     # Sample points on faces
     for i in range(n):
@@ -57,19 +63,30 @@ def sample_cloud(mesh, n=100):
                 (math.sqrt(r1) * (1 - r2)) * B +\
                 (r2 * math.sqrt(r1)) * C
 
-    # fig = plt.figure()
-    # ax = fig.add_subplot(111, projection='3d')
-    # ax.scatter(PC[:,0], PC[:,1], PC[:,2])
-    # ax.set_xlim([-0.5,0.5])
-    # ax.set_ylim([-0.5,0.5])
-    # ax.set_zlim([-0.5,0.5])
-    
     return PC
 
-mesh = pymesh.load_mesh("test_model/models/model_normalized.obj")
-print(mesh.vertices.shape, mesh.faces.shape)
+def plot_pc(pc):
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+    ax.scatter(pc[:,0], pc[:,1], pc[:,2])
+    ax.set_xlim([-0.5,0.5])
+    ax.set_ylim([-0.5,0.5])
+    ax.set_zlim([-0.5,0.5])
+    plt.show()
+
+def datalist_pc():
+    MODEL_PATHS = './shapenet/*/*/models/model_normalized.obj'
+    for mesh_file in glob.glob(MODEL_PATHS):
+        mesh = pymesh.load_mesh(mesh_file)
+        pc = sample_cloud(mesh, n=256)
+        yield pc
+
+for pc in datalist_pc():
+    pass
+# mesh = pymesh.load_mesh("test_model/models/model_normalized.obj")
+# print(mesh.vertices.shape, mesh.faces.shape)
 # pymesh.save_mesh("test_model.ply", mesh)
 # mesh = PyntCloud.from_file("test_model.ply")
 # mesh.plot(mesh=True)
 # sample_cloud(mesh)
-sample_cloud(mesh, n=256)
+# sample_cloud(mesh, n=256)
