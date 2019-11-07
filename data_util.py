@@ -92,7 +92,14 @@ def datalist_pc():
 def synset_to_name(offset):
     synset = wn.synset_from_pos_and_offset('n', offset)
     return synset.name().split('.')[0]
-    
+
+def project_2d(mesh, K):
+    pass
+
+def project_3d(z, K):
+    pass
+
+
 # for pc, syn_id, model_id in tqdm(datalist_pc()):
 #     save_path = "./shapenet/%s/%s/models/model_normalized_256.npy" % (syn_id, model_id)
 #     if os.path.exists(save_path):
