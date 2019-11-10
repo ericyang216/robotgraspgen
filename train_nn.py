@@ -1,18 +1,45 @@
 import torch
-import tqdm
+import glob
+import numpy as np
 from torch.utils.data import DataLoader, TensorDataset
 
+def train_one_epoch(model, dataloader, optimizer):
+    total_loss = 0
+    n = 0
+    for [x] in dataloader:
+        optimizer.zero_grad()
 
-def train(model, dataloader, epochs):
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
-    for ep in range(epochs):
-        for [x] in dataloader:
-            optimizer.zero_grad()
+        loss = model.loss_chamfer(x)
 
-            loss = model.loss_chamfer(x)
-            loss.backward()
-            optimizer.step()
-            # pbar.update(1)
+        loss.backward()
+        optimizer.step()
 
-            # pbar.set_postfix(loss='{:.2e}'.format(loss))
-        print("Epoch {} loss: {}".format(ep, loss))
+        total_loss += loss
+        n += 1
+
+    return total_loss / n, n
+    
+def sample_from_model(model, n):
+    x_samples = model.sample_x(n)
+    return x_samples.cpu().detach().numpy()
+
+def gather_pc_data(synset_id, n=256):
+    # Get all point clouds from sysnets
+    MODEL_PATH = './shapenet/{:08}/*/models/model_normalized_{}.npy'.format(
+                    synset_id, n)
+
+    data = None
+    model_files = glob.glob(MODEL_PATH)
+    for i, pc_file in enumerate(model_files):
+        if data is None:
+            data = np.zeros((len(model_files), n, 3)).astype(np.float32)
+
+        data[i] = np.load(pc_file).astype(np.float32)
+
+    return data
+
+def make_dataloader(synset_id, device, batchsize=1, n=256):
+    data_np = gather_pc_data(synset_id, n)
+    data_tensor = torch.from_numpy(data_np).to(device)
+    data_tensor.transpose_(2, 1)
+    return DataLoader(TensorDataset(data_tensor), batch_size=batchsize)
