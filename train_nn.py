@@ -1,5 +1,6 @@
 import torch
 import glob
+import datetime
 import numpy as np
 from torch.utils.data import DataLoader, TensorDataset
 
@@ -18,10 +19,19 @@ def train_one_epoch(model, dataloader, optimizer):
         n += 1
 
     return total_loss / n, n
-    
+
 def sample_from_model(model, n):
     x_samples = model.sample_x(n)
     return x_samples.cpu().detach().numpy()
+
+def save_checkpoint(model, path=None):
+    if path is None:
+        path = './checkpoints/{}-{}'.format(model.name, datatime.timestamp().total_time())
+    torch.save(model.state_dict(), path)
+
+def load_checkpoint(model, path):
+    model.load_state_dict(torch.load(path))
+    return model
 
 def gather_pc_data(synset_id, n=256):
     # Get all point clouds from sysnets

@@ -68,10 +68,15 @@ def sample_cloud(mesh, n=100):
 
     return PC
 
-def plot_pc(pc):
+def plot_pc(pc, CXYZ=False):
     fig = plt.figure()
     ax = fig.add_subplot(111, projection='3d')
-    ax.scatter(pc[:,0], pc[:,1], pc[:,2])
+    # Torch dimension order: CX
+    if CXYZ:
+        ax.scatter(pc[0,:], pc[1,:], pc[2,:])
+    # Default dimension order: XC   
+    else:
+        ax.scatter(pc[:,0], pc[:,1], pc[:,2])
     ax.set_xlim([-0.5,0.5])
     ax.set_ylim([-0.5,0.5])
     ax.set_zlim([-0.5,0.5])

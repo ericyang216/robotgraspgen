@@ -209,7 +209,7 @@ class Decoder(nn.Module):
 
     def forward(self, z):
         x = self.net(z)
-        return x.view((-1, self.x_dim, 3))
+        return x.view((-1, 3, self.x_dim))
 
     def decode(self, z, y=None):
         zy = z if y is None else torch.cat((z, y), dim=1)
