@@ -7,11 +7,11 @@ from chamfer.chamfer_distance import ChamferDistance
 chamfer_dist = ChamferDistance()
 
 class PCAE(nn.Module):
-    def __init__(self, name='pcae', z_dim=1024):
+    def __init__(self, name='pcae', z_dim=1024, x_dim=512):
         super().__init__()
         self.name = name
         self.z_dim = z_dim
-        self.x_dim = 256 # N x 3 set of points
+        self.x_dim = x_dim # N x 3 set of points
 
         self.enc = Encoder(self.x_dim, self.z_dim)
         self.dec = Decoder(self.x_dim, self.z_dim)
@@ -181,7 +181,11 @@ class Encoder(nn.Module):
             nn.ReLU(),
             nn.Conv1d(in_channels=64, out_channels=128, kernel_size=1),
             nn.ReLU(),
-            nn.Conv1d(in_channels=128, out_channels=z_dim, kernel_size=1),
+            nn.Conv1d(in_channels=128, out_channels=256, kernel_size=1),
+            nn.ReLU(),
+            nn.Conv1d(in_channels=256, out_channels=512, kernel_size=1),
+            nn.ReLU(),
+            nn.Conv1d(in_channels=512, out_channels=z_dim, kernel_size=1),
             nn.ReLU(),
             nn.MaxPool1d(kernel_size=x_dim)
         )
@@ -202,9 +206,13 @@ class Decoder(nn.Module):
         self.z_dim = z_dim
         self.y_dim = y_dim
         self.net = nn.Sequential(
-            nn.Linear(in_features=z_dim, out_features=1024),
+            nn.Linear(in_features=z_dim, out_features=z_dim),
             nn.ReLU(),
-            nn.Linear(in_features=1024, out_features=x_dim * 3)
+            nn.Linear(in_features=z_dim, out_features=z_dim),
+            nn.ReLU(),
+            nn.Linear(in_features=z_dim, out_features=z_dim),
+            nn.ReLU(),
+            nn.Linear(in_features=z_dim, out_features=x_dim * 3)
         )
 
     def forward(self, z):

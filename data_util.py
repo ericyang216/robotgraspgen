@@ -82,15 +82,21 @@ def plot_pc(pc, CXYZ=False):
     ax.set_zlim([-0.5,0.5])
     plt.show()
 
-def datalist_pc():
-    MODEL_PATHS = './shapenet/*/*/models/model_normalized.obj'
-    for mesh_file in glob.glob(MODEL_PATHS):
-        mesh = pymesh.load_mesh(mesh_file)
-        pc = sample_cloud(mesh, n=256)
+def datalist_pc(n_points=256, paths=None, skip=None):
+    MODEL_PATHS = './shapenet/02*/*/models/model_normalized.obj'
+    if paths:
+        MODEL_PATHS = paths
 
+    for mesh_file in glob.glob(MODEL_PATHS):
         items = mesh_file.split('/')
         synset_id = items[2]
         model_id = items[3] 
+
+        if skip and os.path.exists(skip % (synset_id, model_id)):
+            continue
+
+        mesh = pymesh.load_mesh(mesh_file)
+        pc = sample_cloud(mesh, n=n_points)
 
         yield pc, synset_id, model_id
 
@@ -98,15 +104,19 @@ def synset_to_name(offset):
     synset = wn.synset_from_pos_and_offset('n', offset)
     return synset.name().split('.')[0]
 
-def project_2d(mesh, K):
-    pass
+def convert_obj_to_stl(obj_file):
+    stl_path = obj_file[:-3] + "stl"
+    if not os.path.exists(stl_path):
+        mesh = pymesh.load_mesh(obj_file)
+        pymesh.save_mesh(stl_path, mesh)
 
-def project_3d(z, K):
-    pass
+model_paths = './shapenet/02*/*/models/model_normalized.obj'
+for obj_file in tqdm(glob.glob(model_paths)):
+    convert_obj_to_stl(obj_file)
 
-
-# for pc, syn_id, model_id in tqdm(datalist_pc()):
-#     save_path = "./shapenet/%s/%s/models/model_normalized_256.npy" % (syn_id, model_id)
+# for pc, syn_id, model_id in datalist_pc(n_points=512, skip="./shapenet/%s/%s/models/model_normalized_512.npy"):
+#     save_path = "./shapenet/%s/%s/models/model_normalized_512.npy" % (syn_id, model_id)
 #     if os.path.exists(save_path):
 #         continue
+#     print(save_path)
 #     np.save(save_path, pc)
