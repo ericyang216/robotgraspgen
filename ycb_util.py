@@ -11,6 +11,26 @@ import cv2
 import pdb
 
 YCB_DATA_DIR = "ycb/ycb/"
+YCB_OBJECTS = ["001_chips_can", 
+            "002_master_chef_can", 
+            "003_cracker_box",
+            "004_sugar_box",
+            "005_tomato_soup_can",
+            "006_mustard_bottle",
+            "007_tuna_fish_can",
+            "008_pudding_box",
+            "009_gelatin_box",
+            "010_potted_meat_can",
+            "011_banana",
+            "012_strawberry",
+            "013_apple",
+            "014_lemon",
+            "015_peach",
+            "016_pear",
+            "017_orange",
+            "018_plum"]
+
+YCB_VIEW_ANGLES = np.linspace(0, 360, num=120).astype(int)
 
 def depth_to_rgb_uv(xyz, rgb_K, T_rgb_depth):
     # Point in RGB cam coordinates
@@ -44,36 +64,42 @@ def point_cloud_from_depth(depth_map, depth_K, rgb_K=None, mask=None, T_rgb_dept
                 y = ((v - cy) * z) * inv_fy
 
                 # Check if point is in segmentation mask of rgb image
+                # if mask is not None:
+                #     rgb_H, rgb_W = mask.shape
+
+                #     # Point in RGB cam coordinates
+                #     xyz = np.array([x, y, z, 1.])
+                #     rgb_u, rgb_v = depth_to_rgb_uv(xyz, rgb_K, T_rgb_depth)
+
+                #     if rgb_u >= rgb_W or rgb_v >= rgb_H or rgb_u < 0 or rgb_v < 0:
+                #         continue
+
+                #     rgb_im[rgb_v, rgb_u] = int((z / max_z) * 255)
+
                 if mask is not None:
-                    rgb_H, rgb_W = mask.shape
 
-                    # Point in RGB cam coordinates
-                    xyz = np.array([x, y, z, 1.])
-                    rgb_u, rgb_v = depth_to_rgb_uv(xyz, rgb_K, T_rgb_depth)
-
-                    if rgb_u >= rgb_W or rgb_v >= rgb_H or rgb_u < 0 or rgb_v < 0\
-                       or mask[rgb_v, rgb_u] == 255:
+                    if u >= W or v >= H or u < 0 or v < 0 or mask[v,u] == 255:
                         continue
-                    rgb_im[rgb_v, rgb_u] = int((z / max_z) * 255)
 
-    cv2.imshow('rgb_im', rgb_im)
-    cv2.waitKey()
-    #                 if rgb_u >= rgb_W or rgb_v >= rgb_H or mask[rgb_v, rgb_u] == 255:
-    #                     continue
+                    # rgb_im[rgb_v, rgb_u] = int((z / max_z) * 255)
 
-    #             pc[N, 0] = x
-    #             pc[N, 1] = y
-    #             pc[N, 2] = z
+  
+                pc[N, 0] = x
+                pc[N, 1] = y
+                pc[N, 2] = z
 
-    #             N += 1
+                N += 1
+    # cv2.imshow('rgb_im', rgb_im)
+    # cv2.waitKey()
 
-    # pc = np.delete(pc, range(N, H * W), axis=0)        
-    # return pc
+    pc = np.delete(pc, range(N, H * W), axis=0)        
+    return pc
 
 def get_depth_image(target_object, viewpoint_camera, viewpoint_angle):
     basename = "{0}_{1}".format(viewpoint_camera, viewpoint_angle)
     depth_file = os.path.join(YCB_DATA_DIR + target_object, basename + ".h5")
     depth_map = h5.File(depth_file, 'r')["depth"][:]
+    # depth_map = filter_discontinuities(depth_map)
 
     calibration_file = os.path.join(YCB_DATA_DIR + target_object, "calibration.h5")
     calibration = h5.File(calibration_file, 'r')
@@ -90,7 +116,7 @@ def get_depth_image(target_object, viewpoint_camera, viewpoint_angle):
     T_rgb_ref = calibration[rgb_from_ref][:]
 
     T_rgb_depth = np.matmul(T_rgb_ref, np.linalg.inv(T_depth_ref))
-    # unregisteredDepthMap = filterDiscontinuities(unregisteredDepthMap) * depthScale
+
     return depth_map * depth_scale, depth_K, rgb_K, T_rgb_depth
 
 def get_rgb_seg(target_object, viewpoint_camera, viewpoint_angle):
@@ -100,6 +126,17 @@ def get_rgb_seg(target_object, viewpoint_camera, viewpoint_angle):
     mask = cv2.resize(mask, (640, 480))
     return mask
 
+def filter_and_sample(pc, n=128):
+    distance_threshold = 0.25 # meters
+    avg = np.mean(pc, axis=0)
+    diff = pc - avg[np.newaxis, :]
+    dist = np.linalg.norm(diff, axis=1)
+    outliers = np.argwhere(dist > distance_threshold)  
+    pc_filtered = np.delete(pc, outliers, axis=0)
+
+    sample_idx = np.random.randint(0, high=pc_filtered.shape[0], size=n)
+    return pc_filtered[sample_idx]
+
 def plot_pc(pc, CXYZ=False):
     fig = plt.figure()
     ax = fig.add_subplot(111, projection='3d')
@@ -108,16 +145,19 @@ def plot_pc(pc, CXYZ=False):
         ax.scatter(pc[0,:], pc[1,:], pc[2,:])
     # Default dimension order: XC   
     else:
-        ax.scatter(pc[:,0], pc[:,1], pc[:,2])
-    # ax.set_xlim([-0.5,0.5])
-    # ax.set_ylim([-0.5,0.5])
-    # ax.set_zlim([-0.5,0.5])
+        ax.scatter(pc[:,0], pc[:,2], pc[:,1])
+    ax.set_xlim([-0.5,0.5])
+    ax.set_zlim([-0.5,0.5])
+    ax.set_ylim([0,2])
     plt.show()   
 
-mask = get_rgb_seg("001_chips_can", "NP1", 0)
-depth, depth_K, rgb_K, T_rgb_depth = get_depth_image("001_chips_can", "NP1", 0)
-print(rgb_K)
-print(depth_K)
-pc = point_cloud_from_depth(depth, depth_K, rgb_K, mask, T_rgb_depth)
-# # print(pc.shape)
-# plot_pc(pc)
+for target_object in ["001_chips_can"]: #YCB_OBJECTS:
+    for view_angle in YCB_VIEW_ANGLES:
+        print(target_object, view_angle)
+        mask = get_rgb_seg(target_object, "NP1", view_angle)
+        depth, depth_K, rgb_K, T_rgb_depth = get_depth_image(target_object, "NP1", view_angle)
+        pc = point_cloud_from_depth(depth, depth_K, rgb_K, mask, T_rgb_depth)
+        pc = filter_and_sample(pc)
+
+        print(pc.shape)
+        plot_pc(pc)
