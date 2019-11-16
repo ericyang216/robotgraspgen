@@ -9,6 +9,8 @@ import matplotlib.pyplot as plt
 import h5py as h5
 import cv2
 import pdb
+from open3d import *    
+
 
 YCB_DATA_DIR = "ycb/ycb/"
 YCB_OBJECTS = ["001_chips_can", 
@@ -135,7 +137,11 @@ def filter_and_sample(pc, n=128):
     pc_filtered = np.delete(pc, outliers, axis=0)
 
     sample_idx = np.random.randint(0, high=pc_filtered.shape[0], size=n)
-    return pc_filtered[sample_idx]
+    pc_sampled = pc_filtered[sample_idx]
+
+    pc_centered = pc_sampled - np.mean(pc_sampled, axis=0)
+
+    return pc_centered
 
 def plot_pc(pc, CXYZ=False):
     fig = plt.figure()
@@ -148,16 +154,75 @@ def plot_pc(pc, CXYZ=False):
         ax.scatter(pc[:,0], pc[:,2], pc[:,1])
     ax.set_xlim([-0.5,0.5])
     ax.set_zlim([-0.5,0.5])
-    ax.set_ylim([0,2])
-    plt.show()   
+    ax.set_ylim([-0.5,0.5])
+    plt.show() 
 
-for target_object in ["001_chips_can"]: #YCB_OBJECTS:
+def pc_from_ply(ply_file, n=1024):
+    # pc = read_point_cloud(ply_file) # Read the point cloud
+    pc = pymesh.load_mesh(ply_file)
+    points = pc.vertices
+    sample_idx = np.random.randint(0, high=points.shape[0], size=n)
+
+    points = points[sample_idx]
+
+    x = points[:, 0][:, np.newaxis]
+    z = points[:, 1][:, np.newaxis]
+    y = points[:, 2][:, np.newaxis]
+
+    return np.concatenate([x, y, z], axis=1)
+
+def generate_gt_pc(target_object, n=1024):
+    OBJECT_PATH = 'ycb/ycb/%s/' % target_object
+    ply_path = OBJECT_PATH + 'clouds/merged_cloud.ply'
+
+    for i in range(10):
+        pc = pc_from_ply(ply_path, n=n)
+
+        save_path = OBJECT_PATH + ('clouds/cloud_%s_%s.npy' % (n, i))
+        print(save_path)
+        np.save(save_path, pc)
+
+def data_files_exist(target_object, view_angle, CAM):
+    basename = "{}_{}".format(CAM, view_angle)
+    basedir = os.path.join(YCB_DATA_DIR, target_object)
+
+    calibration = os.path.join(basedir, 'calibration.h5')
+    depth = os.path.join(basedir, basename + ".h5")
+    mask = os.path.join(basedir, "masks/{}".format(basename + "_mask.pbm"))
+
+    return os.path.exists(calibration) and os.path.exists(depth) and os.path.exists(mask)
+
+def generate_partial_pc(target_object, view_angle, partial_n=128):
+    CAM = "NP1"
+
+    if not data_files_exist(target_object, view_angle, CAM):
+        print("{} {} {} data does not exist: skipping".format(target_object, CAM, view_angle))
+        return
+
+    mask = get_rgb_seg(target_object, CAM, view_angle)
+    depth, depth_K, rgb_K, T_rgb_depth = get_depth_image(target_object, CAM, view_angle)
+    pc = point_cloud_from_depth(depth, depth_K, rgb_K, mask, T_rgb_depth)
+    pc = filter_and_sample(pc, n=partial_n)
+
+    save_path = 'ycb/ycb/%s/clouds/partial_%s_%s_%s.npy' % (target_object, CAM, view_angle, partial_n)
+    print(save_path)
+    np.save(save_path, pc)
+
+for target_object in YCB_OBJECTS:
     for view_angle in YCB_VIEW_ANGLES:
-        print(target_object, view_angle)
-        mask = get_rgb_seg(target_object, "NP1", view_angle)
-        depth, depth_K, rgb_K, T_rgb_depth = get_depth_image(target_object, "NP1", view_angle)
-        pc = point_cloud_from_depth(depth, depth_K, rgb_K, mask, T_rgb_depth)
-        pc = filter_and_sample(pc)
+        generate_partial_pc(target_object, view_angle)
 
-        print(pc.shape)
-        plot_pc(pc)
+# ply_file = '/home/eric/git/shapegrasp/ycb/ycb/001_chips_can/clouds/merged_cloud.ply'
+# pc = pc_from_ply(ply_file)
+# plot_pc(pc)
+
+# for target_object in ["001_chips_can"]: #YCB_OBJECTS:
+#     for view_angle in YCB_VIEW_ANGLES:
+#         print(target_object, view_angle)
+#         mask = get_rgb_seg(target_object, "NP1", view_angle)
+#         depth, depth_K, rgb_K, T_rgb_depth = get_depth_image(target_object, "NP1", view_angle)
+#         pc = point_cloud_from_depth(depth, depth_K, rgb_K, mask, T_rgb_depth)
+#         pc = filter_and_sample(pc)
+
+#         print(pc.shape)
+#         plot_pc(pc)
