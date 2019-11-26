@@ -39,6 +39,7 @@ class SawyerLiftObject(SawyerEnv):
         camera_height=256,
         camera_width=256,
         camera_depth=False,
+        target_object='cube',
     ):
         """
         Args:
@@ -98,7 +99,8 @@ class SawyerLiftObject(SawyerEnv):
                 ensure_object_boundary_in_range=False,
                 z_rotation=True,
             )
-
+ 
+        self.target_object = target_object
         super().__init__(
             gripper_type=gripper_type,
             gripper_visualization=gripper_visualization,
@@ -135,12 +137,23 @@ class SawyerLiftObject(SawyerEnv):
         self.mujoco_arena.set_origin([0.16 + self.table_full_size[0] / 2, 0, 0])
 
         # initialize objects of interest
-        # cube = BoxObject(
-        #     size_min=[0.020, 0.020, 0.020],  # [0.015, 0.015, 0.015],
-        #     size_max=[0.022, 0.022, 0.022],  # [0.018, 0.018, 0.018])
-        #     rgba=[1, 0, 0, 1],
-        # )
-        cube = MilkObject()
+        
+        cube = BoxObject(
+            size_min=[0.020, 0.020, 0.020],  # [0.015, 0.015, 0.015],
+            size_max=[0.022, 0.022, 0.022],  # [0.018, 0.018, 0.018])
+            rgba=[1, 0, 0, 1],
+        )
+        if self.target_object == 'can':
+            cube = CanObject()
+        elif self.target_object == 'bottle':
+            cube = BottleObject()
+        elif self.target_object == 'milk':
+            cube = MilkObject()
+        elif self.target_object == 'cereal':
+            cube = CerealObject()
+        elif self.target_object == 'lemon':
+            cube = LemonObject()
+
         self.mujoco_objects = OrderedDict([("cube", cube)])
 
         # task includes arena, robot, and objects of interest

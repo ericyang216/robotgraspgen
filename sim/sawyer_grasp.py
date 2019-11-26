@@ -6,12 +6,14 @@ from robosuite.utils.transform_utils import convert_quat
 from robosuite.environments.sawyer import SawyerEnv
 
 from robosuite.models.arenas import TableArena
-from robosuite.models.objects import BoxObject, MujocoXMLObject
+from robosuite.models.objects import BoxObject, CylinderObject, BallObject, MujocoXMLObject
 from robosuite.models.objects.xml_objects import *
 
 from robosuite.models.robots import Sawyer
 from robosuite.models.tasks import TableTopTask, UniformRandomSampler
 
+GRIPPER_LENGTH = 0.14
+GRIP_CONTACT = 0.02
 
 class SawyerGrasp(SawyerEnv):
     """
@@ -94,13 +96,19 @@ class SawyerGrasp(SawyerEnv):
         if placement_initializer:
             self.placement_initializer = placement_initializer
         else:
+            # self.placement_initializer = UniformRandomSampler(
+            #     x_range=[-0.03, 0.03],
+            #     y_range=[-0.03, 0.03],
+            #     ensure_object_boundary_in_range=False,
+            #     z_rotation=True,
+            # )
             self.placement_initializer = UniformRandomSampler(
-                x_range=[-0.03, 0.03],
-                y_range=[-0.03, 0.03],
+                x_range=[-0.05, 0.05],
+                y_range=[-0.05, 0.05],
                 ensure_object_boundary_in_range=False,
-                z_rotation=True,
+                z_rotation=None, #None for random
             )
- 
+
         self.target_object = target_object
         super().__init__(
             gripper_type=gripper_type,
@@ -140,20 +148,34 @@ class SawyerGrasp(SawyerEnv):
         # initialize objects of interest
         
         cube = BoxObject(
-            size_min=[0.020, 0.020, 0.020],  # [0.015, 0.015, 0.015],
-            size_max=[0.022, 0.022, 0.022],  # [0.018, 0.018, 0.018])
+            size_min=[0.015, 0.015, 0.015],  # [0.015, 0.015, 0.015],
+            size_max=[0.040, 0.025, 0.050],  # [0.018, 0.018, 0.018])
             rgba=[1, 0, 0, 1],
         )
-        if self.target_object == 'can':
-            cube = CanObject()
-        elif self.target_object == 'bottle':
-            cube = BottleObject()
-        elif self.target_object == 'milk':
-            cube = MilkObject()
-        elif self.target_object == 'cereal':
-            cube = CerealObject()
-        elif self.target_object == 'lemon':
-            cube = LemonObject()
+        if self.target_object == 'cylinder':
+            cube = CylinderObject(
+                size_min=[0.015, 0.01], 
+                size_max=[0.025, 0.05],  
+                rgba=[1, 0, 0, 1],
+            )
+        elif self.target_object == 'ball':
+            cube = BallObject(
+                size_min=[0.01], 
+                size_max=[0.02],  
+                rgba=[1, 0, 0, 1],
+            )
+
+        self.object = cube
+        # if self.target_object == 'can':
+        #     cube = CanObject()
+        # elif self.target_object == 'bottle':
+        #     cube = BottleObject()
+        # elif self.target_object == 'milk':
+        #     cube = MilkObject()
+        # elif self.target_object == 'cereal':
+        #     cube = CerealObject()
+        # elif self.target_object == 'lemon':
+        #     cube = LemonObject()
 
         self.mujoco_objects = OrderedDict([("cube", cube)])
 
@@ -165,6 +187,18 @@ class SawyerGrasp(SawyerEnv):
             initializer=self.placement_initializer,
         )
         self.model.place_objects()
+
+    def _reset_internal(self):
+        """
+        Sets initial pose of arm and grippers.
+        """
+        super()._reset_internal()
+        self.sim.data.qpos[self._ref_joint_pos_indexes] = np.zeros(self.dof)
+
+        if self.has_gripper:
+            self.sim.data.qpos[
+                self._ref_gripper_joint_pos_indexes
+            ] = self.gripper.init_qpos
 
     def _get_reference(self):
         """
@@ -183,11 +217,46 @@ class SawyerGrasp(SawyerEnv):
         ]
         self.cube_geom_id = self.sim.model.geom_name2id("cube")
 
-    def _get_body_pos(self, name):
-        body_id = self.sim.model.body_name2id(name)
-        body_pos = np.array(self.sim.data.body_xpos[body_id])
-        body_quat = convert_quat(
-                np.array(self.sim.data.body_xquat[body_id]), to="xyzw")
+    def _get_target_grasp(self):
+        pose = self.pose_in_base_from_name('cube')
+        wpos = self._get_observation()['cube_pos']
+        height = wpos[2] - self.table_full_size[2]
+        pos = pose[:3, 3] + np.array([-0.02, 0.01, GRIPPER_LENGTH - GRIP_CONTACT]) 
+        return pos, 0
+
+    # relative to table top and center
+    def _get_grasp_gt(self):
+        table_top_center, _ = self._get_table_top_center()
+        pose = self.pose_in_base_from_name('cube')
+        pos = pose[:3, 3]
+
+        pos_gt = pos - table_top_center
+        grasp_height = self.object.get_top_offset()[-1]
+        if len(self.object.size) == 1: #sphere
+            grasp_height = grasp_height / 2
+
+        pos_gt[2] = grasp_height
+
+        rot_gt = pose[:3, :3]
+        return pos_gt, rot_gt
+
+    def _get_table_top_center(self):
+        pose = self.pose_in_base_from_name('table')
+        pos = pose[:3, 3]
+        rot = pose[:3, :3]
+        pos[2] += self.table_full_size[2]/2
+        return pos, rot
+
+    def _get_body_pos(self, name, base=True):
+        if base:
+            pose = self.pose_in_base_from_name(name)
+            body_pos = pose[:3, 3]
+            body_quat = pose[:3,:3]
+        else:
+            body_id = self.sim.model.body_name2id(name)
+            body_pos = np.array(self.sim.data.body_xpos[body_id])
+            body_quat = convert_quat(
+                    np.array(self.sim.data.body_xquat[body_id]), to="xyzw")
 
         return body_pos, body_quat
 

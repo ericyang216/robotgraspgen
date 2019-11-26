@@ -6,7 +6,8 @@ import matplotlib.pyplot as plt
 
 from nn_models.pcae import PCAE
 from train_nn import * #train_one_epoch, sample_from_model, make_dataloader
-from data_util import plot_pc
+from ycb_util import *
+# from data_util import plot_pc
 
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 # parser.add_argument('--z',         type=int, default=10,    help="Number of latent dimensions")
@@ -23,12 +24,10 @@ args = parser.parse_args()
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-synset_dict = {'airplane': 2691156}
-
 model = PCAE().to(device)
 
-print("Loading trainig data")
-dataloader = make_dataloader(synset_dict['airplane'], device, batchsize=args.batch, n=512)
+print("Loading training data")
+dataloader = make_dataloader("001_chips_can", device, batchsize=args.batch, partial_n=128, complete_n=1024)
 
 if args.checkpoint:
     print("Loading checkpoint: {}".format(args.checkpoint))
@@ -40,7 +39,7 @@ if args.train:
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
     epoch_loss = []
 
-    for ep in range(args.eps):
+    for ep in range(1, args.eps+1):
         start = time.time()
         loss, size = train_one_epoch(model, dataloader, optimizer)
         end = time.time()
@@ -57,7 +56,7 @@ if args.train:
         epoch_loss.append(loss)
 
         if ep % args.eps_save == 0 and ep != 0:
-            save_path = 'checkpoints/pcae_airplane_512_cd_{}'.format(ep)
+            save_path = 'checkpoints/pcae_chips_can_cd_{}'.format(ep)
             print("Saving checkpoint: {}".format(save_path))
             save_checkpoint(model, save_path)
 
@@ -69,15 +68,30 @@ if args.train:
     
 if args.eval:
     # for testing
-    eval_data = make_dataloader(synset_dict['airplane'], device, batchsize=1, n=512)
-
-    for [x] in eval_data:
+    eval_data = make_dataloader("001_chips_can", device, batchsize=1, partial_n=128, complete_n=1024)
+    accuracy = 0.
+    total = 0.
+    for (x, y) in eval_data:
         x_np = x.cpu().detach().numpy()[0]
+        y_np = y.cpu().detach().numpy()[0]
         x_hat = model(x).cpu().detach().numpy()[0]
+        
+        x_np = x_np.transpose()
+        y_np = y_np.transpose()
+        x_hat = x_hat.transpose()
+        
+        print(pc_accuracy(x_hat, y_np))
         print(x_np.shape)
         print(x_hat.shape)
+        print(y_np.shape)
 
-        plot_pc(x_np, CXYZ=True)
-        plot_pc(x_hat, CXYZ=True)
+        plot_pc(x_np, CXYZ=False)
+        plot_pc(x_hat, CXYZ=False)
+        plot_pc(y_np)
+
+        accuracy += pc_accuracy(x_hat, y_np)
+        total += 1
+    
+    print("Accuracy: {}".format(accuracy/total))
 
     

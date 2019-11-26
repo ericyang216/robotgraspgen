@@ -1,3 +1,4 @@
+import torch
 import numpy as np
 import math
 import pymesh
@@ -9,8 +10,8 @@ import matplotlib.pyplot as plt
 import h5py as h5
 import cv2
 import pdb
-from open3d import *    
 
+from torch.utils.data import DataLoader, TensorDataset
 
 YCB_DATA_DIR = "ycb/ycb/"
 YCB_OBJECTS = ["001_chips_can", 
@@ -208,9 +209,56 @@ def generate_partial_pc(target_object, view_angle, partial_n=128):
     print(save_path)
     np.save(save_path, pc)
 
-for target_object in YCB_OBJECTS:
-    for view_angle in YCB_VIEW_ANGLES:
-        generate_partial_pc(target_object, view_angle)
+def gather_pc_data(target_object, partial_n=128, complete_n=1024):
+    # Get all point clouds from sysnets
+
+    PC_PATH = './ycb/ycb/{}/clouds/partial_*_{}.npy'.format(target_object, partial_n)
+    GT_PATH = './ycb/ycb/{}/clouds/cloud_{}_*.npy'.format(target_object, complete_n)
+
+    pc_files = glob.glob(PC_PATH)
+    gt_files = glob.glob(GT_PATH)
+    
+    data = np.zeros((len(pc_files), complete_n, 3)).astype(np.float32)
+    gt   = np.zeros((len(pc_files), complete_n, 3)).astype(np.float32)
+
+    for i, pc_file in enumerate(pc_files):
+        # Get a ground truth cloud
+        idx = np.random.randint(0, len(gt_files))
+        gt[i] = np.load(gt_files[idx]).astype(np.float32)
+
+        # Subsample partial cloud
+        partial = np.load(pc_file).astype(np.float32)
+        idx = np.random.randint(0, partial.shape[0], size=complete_n)
+        data[i] = partial[idx, :]
+
+    return data, gt
+
+def make_dataloader(target_object, device, batchsize=1, partial_n=128, complete_n=1024):
+    data_np, gt_np = gather_pc_data(target_object, partial_n, complete_n)
+   
+    data_tensor = torch.from_numpy(data_np).to(device)
+    gt_tensor = torch.from_numpy(gt_np).to(device)
+    
+    data_tensor.transpose_(2, 1)
+    gt_tensor.transpose_(2, 1)
+
+    return DataLoader(TensorDataset(data_tensor, gt_tensor), batch_size=batchsize)
+
+
+def pc_accuracy(x, y, rho=0.02):
+    total = x.shape[0]
+    n = 0.
+    for p in x:
+        for q in y:
+            if np.linalg.norm(p-q) <= rho:
+                n += 1.
+                break
+
+    return n / total
+
+# for target_object in YCB_OBJECTS:
+#     for view_angle in YCB_VIEW_ANGLES:
+#         generate_partial_pc(target_object, view_angle)
 
 # ply_file = '/home/eric/git/shapegrasp/ycb/ycb/001_chips_can/clouds/merged_cloud.ply'
 # pc = pc_from_ply(ply_file)

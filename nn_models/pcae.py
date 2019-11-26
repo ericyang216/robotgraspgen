@@ -7,7 +7,7 @@ from chamfer.chamfer_distance import ChamferDistance
 chamfer_dist = ChamferDistance()
 
 class PCAE(nn.Module):
-    def __init__(self, name='pcae', z_dim=1024, x_dim=512):
+    def __init__(self, name='pcae', z_dim=1024, x_dim=1024):
         super().__init__()
         self.name = name
         self.z_dim = z_dim
@@ -26,9 +26,9 @@ class PCAE(nn.Module):
         x_hat = self.dec(z)
         return x_hat
 
-    def loss_chamfer(self, x):
-        x_hat = self.forward(x)
-        d1, d2 = chamfer_dist(x, x_hat)
+    def loss_chamfer(self, x, y):
+        # x_hat = self.forward(x)
+        d1, d2 = chamfer_dist(x, y)
         return torch.mean(d1) + torch.mean(d2)
 
     def loss_emd(self, x):

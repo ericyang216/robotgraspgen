@@ -10,6 +10,7 @@ from robosuite.wrappers import IKWrapper
 from sawyer_grasp import SawyerGrasp
 
 from sim_util import *
+from grasp_tasks import * 
 
 H = 480
 W = 640
@@ -25,7 +26,7 @@ env = SawyerGrasp(
     camera_name='agentview',     # use "agentview" camera
     use_object_obs=True,        # no object feature when training on pixels
     camera_depth=True,
-    target_object='can'
+    target_object='cereal'
 )
 env = IKWrapper(env)
 
@@ -54,6 +55,34 @@ cam_pos_new = cam_pose_new[:3, 3]
 env._set_cam_pos(CAM_ID, cam_pos_new, cam_quat_new)
 print(cam_pose_new)
 
+cam_pos, cam_quat = env._get_cam_pos(CAM_ID)
+cam_rot = T.quat2mat(cam_quat)
+cam_pose = np.eye(4)
+cam_pose[:3,:3] = cam_rot
+cam_pose[:3, 3] = cam_pos
+print(cam_pose)
+
+assert np.allclose(cam_pose, cam_pose_new, rtol=1e-05, atol=1e-05)
+
+initial_obs = env._get_observation()
+object_pos = initial_obs['cube_pos']
+depth = initial_obs['depth']
+
+pc = depth_to_pc(depth, K)
+np.save("pc_cam_A.npy", pc)
+pc = np.matmul(T.pose_inv(cam_pose), pc.T).T
+print(pc.shape)
+np.save("pc_world_A.npy", pc)
+
+# Set new camera location
+table_pos, table_quat = env._get_body_pos("table")
+print("table:", table_pos)
+cam_pose_new = T.rotation_matrix(math.pi/2, np.array([0,0,1]), table_pos)
+cam_pose_new = np.matmul(cam_pose_new, cam_pose)
+cam_quat_new = T.mat2quat(cam_pose_new[:3,:3])
+cam_pos_new = cam_pose_new[:3, 3]
+env._set_cam_pos(CAM_ID, cam_pos_new, cam_quat_new)
+print(cam_pose_new)
 
 cam_pos, cam_quat = env._get_cam_pos(CAM_ID)
 cam_rot = T.quat2mat(cam_quat)
@@ -64,48 +93,80 @@ print(cam_pose)
 
 assert np.allclose(cam_pose, cam_pose_new, rtol=1e-05, atol=1e-05)
 
-action = np.array([0, 0, 0, 0, 0, 0, 0, 0])
-env.set_robot_joint_positions([0, -1.18, 0.00, 2.18, 0.00, 0.57, 1.5708])
 initial_obs = env._get_observation()
 object_pos = initial_obs['cube_pos']
-print(object_pos)
-depth = initial_obs["depth"]
+depth = initial_obs['depth']
 
-# depth = cv2.flip(depth, 0)
-# cv2.imwrite('depth.png', depth / np.max(depth) * 255)
 pc = depth_to_pc(depth, K)
-np.save("pc_cam.npy", pc)
+np.save("pc_cam_B.npy", pc)
 pc = np.matmul(T.pose_inv(cam_pose), pc.T).T
 print(pc.shape)
-np.save("pc_world.npy", pc)
-exit()
-# plot_pc(pc)
+np.save("pc_world_B.npy", pc)
 
 
-target_quat  = env._right_hand_quat
-target_pos   = env._get_observation()['cube_pos']
+init_pose(env)
+print(env._get_observation()['cube_pos'])
+target_grasp = env._get_target_grasp() #x,y,z,a
+grasp(env, target_grasp)
 
-while True:
+# target_quat  = env._right_hand_quat
+# target_pos   = 
+# grasp = -1
+# # init_qpos: array([ 0.    , -1.18  ,  0.    ,  2.18  ,  0.    ,  0.57  ,  3.3161])
+# # Move to above table
+# target_pos = env._right_hand_pos + np.array([0, 0, 0.2])
+# done_task = False
+# while not done_task:
+#     current_pos = env._right_hand_pos
+#     dpos = (target_pos - current_pos) * 0.01
+#     if np.max(np.abs(dpos)) < 1e-3:
+#         dpos = np.zeros(3)
+#         done_task = True
 
+#     drotation = np.eye(3)
+#     dquat = T.mat2quat(drotation)
+#     action = np.concatenate([dpos, dquat, [grasp]])
+#     obs, reward, done, info = env.step(action)
+#     env.render()
 
-    current_pos = env._right_hand_pos
-    current_quat = env._right_hand_quat
+# target_pos, target_quat = env._get_target_grasp()
+# # Move to above object
+# done_task = False
+# while not done_task:
+# # for i in range(1000):
 
-    dpos = (target_pos - current_pos) * 0.05
-    drotation = np.eye(3)
-    dquat = T.mat2quat(drotation)
+#     current_pos = env._right_hand_pos
+#     current_quat = env._right_hand_quat
 
-    grasp = -1
-    action = np.concatenate([dpos, dquat, [grasp]])
-    obs, reward, done, info = env.step(action)
-    target_pos = obs['cube_pos']
+#     dpos = (target_pos - current_pos) * 0.01
+#     drotation = np.eye(3)
+#     dquat = T.mat2quat(drotation)
 
-    # print(target_pos)
-    # print(current_pos)
+#     if np.max(np.abs(dpos)) < 1e-3:
+#         print("GRASP")
+#         grasp = 1
+#         dpos = np.zeros(3)
+#         done_task = True
 
-    env.render()
-    # action = np.zeros(env.dof)
+#     action = np.concatenate([dpos, dquat, [grasp]])
+#     obs, reward, done, info = env.step(action)
+#     # target_pos = obs['cube_pos']
+
+#     env.render()
+#     # action = np.zeros(env.dof)
     
+# # Move to above table
+# target_pos = env._right_hand_pos + np.array([0, 0, 0.2])
+# for i in range(100):
+#     current_pos = env._right_hand_pos
+#     dpos = (table_pos - current_pos) * 0.01
+#     if np.max(np.abs(dpos)) < 1e-3:
+#         dpos = np.zeros(3)
+#     drotation = np.eye(3)
+#     dquat = T.mat2quat(drotation)
+#     action = np.concatenate([dpos, dquat, [grasp]])
+#     obs, reward, done, info = env.step(action)
+#     env.render()
 
 # for i in range(1000):
 #     action = np.random.randn(env.dof)  # sample random action
