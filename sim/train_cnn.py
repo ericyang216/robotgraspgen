@@ -7,8 +7,9 @@ import cv2
 import time
 import numpy as np
 import matplotlib.pyplot as plt
-
 from tqdm import tqdm
+
+from nn.cnn import CNNModel
 
 # from Q4_helper import load_dataset, load_training_dataset, load_testing_dataset
 
@@ -29,70 +30,6 @@ else:
     device = torch.device('cpu')
 
 dtype = torch.float32
-
-class Flatten(nn.Module):
-    def forward(self, input):
-        return input.view(input.size(0), -1)
-
-class Normalize(nn.Module):
-    def forward(self, input):
-        sq = input * input
-        norm = torch.sqrt(torch.sum(sq, dim=0))
-        return input / norm
-
-class model(nn.Module):
-
-    def __init__(self):
-        super(model, self).__init__()
-        self.net = nn.Sequential(
-                    nn.Conv2d(1, 16, 3, padding=1),
-                    nn.BatchNorm2d(16),
-                    nn.ReLU(),
-                    nn.MaxPool2d(2),
-                    nn.Conv2d(16, 16, 3, padding=1),
-                    nn.BatchNorm2d(16),
-                    nn.ReLU(),
-                    nn.MaxPool2d(2),
-                    nn.Conv2d(16, 16, 3, padding=1),
-                    nn.BatchNorm2d(16),
-                    nn.ReLU(),
-                    nn.MaxPool2d(2),
-                    nn.Conv2d(16, 16, 3, padding=1),
-                    nn.BatchNorm2d(16),
-                    nn.ReLU(),
-                    Flatten(),
-                    nn.Linear(4096, 1024),
-                    nn.ReLU(),
-                    nn.Linear(1024, 512),
-                    nn.ReLU(),
-                    nn.Linear(512, 256),
-                    nn.ReLU())
-                    # nn.Linear(256, 5))
-
-        self.pos_net = nn.Sequential(nn.Linear(256, 256),
-                                     nn.ReLU(),
-                                     nn.Linear(256, 256),
-                                     nn.ReLU(),
-                                     nn.Linear(256, 3))
-
-        self.ang_net = nn.Sequential(nn.Linear(256, 256),
-                                     nn.ReLU(),
-                                     nn.Linear(256, 256),
-                                     nn.ReLU(),
-                                     nn.Linear(256, 2),
-                                     Normalize())
-    def forward(self, x):
-        features = self.net(x)
-        position = self.pos_net(features)
-        angle = self.ang_net(features)
-        return torch.cat([position, angle], dim=1)
-
-    def loss(self, a, b):
-        mse_loss = torch.mean(torch.sum(torch.abs(a[:, 0:3] - b[:, 0:3]), dim=1), dim=0)
-        cos_loss = 1. - ((a[:, 4] * b[:, 4]) + (a[:, 3] * b[:, 3]))
-        cos_loss = torch.mean(cos_loss, dim=0)
-
-        return mse_loss, cos_loss
 
 def load_dataset(start, end):
     DATA_DIR = "./data/cube/depth"
@@ -116,8 +53,9 @@ def train_one_epoch(model, dataloader, optimizer):
         optimizer.zero_grad()
 
         output = model(img)
-        mse_loss, cos_loss = model.loss(output, label)
-        loss = mse_loss + ANGLE_LOSS_K * cos_loss
+        dist_loss, ang_loss = model.loss(output, label)
+        
+        loss = dist_loss + ANGLE_LOSS_K * ang_loss
         
         loss.backward()
         optimizer.step()
@@ -174,8 +112,9 @@ def evaluate(model, dataset):
         for img, label in dataloader:
 
             output = model(img)
-            mse_loss, cos_loss = model.loss(output, label)
-            loss = mse_loss + ANGLE_LOSS_K * cos_loss
+            dist_loss, ang_loss = model.loss(output, label)
+
+            loss = dist_loss + ANGLE_LOSS_K * ang_loss
 
             total_loss += loss
 
@@ -184,7 +123,7 @@ def evaluate(model, dataset):
 if __name__ == "__main__":
    
     print("=== Creating Model ===")
-    model = model()
+    model = CNNModel()
     model.to(device)
 
     print("=== Loading Testing Data ===")
