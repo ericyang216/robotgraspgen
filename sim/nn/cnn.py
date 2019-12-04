@@ -7,20 +7,33 @@ import nn.model_utils as models
 class CNNModel(nn.Module):
     def __init__(self):
         super(CNNModel, self).__init__()
-        self.cnn = models.CNN()
+        self.cnn = models.MiniCNN()
 
-        self.pos_net = nn.Sequential(nn.Linear(256, 256),
+        self.pos_net = nn.Sequential(nn.Linear(32, 48),
                                      nn.ReLU(),
-                                     nn.Linear(256, 256),
+                                     nn.Linear(48, 48),
                                      nn.ReLU(),
-                                     nn.Linear(256, 3))
+                                     nn.Linear(48, 3))
 
-        self.ang_net = nn.Sequential(nn.Linear(256, 256),
+        self.ang_net = nn.Sequential(nn.Linear(32, 48),
                                      nn.ReLU(),
-                                     nn.Linear(256, 256),
+                                     nn.Linear(48, 48),
                                      nn.ReLU(),
-                                     nn.Linear(256, 2),
+                                     nn.Linear(48, 2),
                                      models.Normalize())
+
+        # self.pos_net = nn.Sequential(nn.Linear(256, 256),
+        #                              nn.ReLU(),
+        #                              nn.Linear(256, 256),
+        #                              nn.ReLU(),
+        #                              nn.Linear(256, 3))
+
+        # self.ang_net = nn.Sequential(nn.Linear(256, 256),
+        #                              nn.ReLU(),
+        #                              nn.Linear(256, 256),
+        #                              nn.ReLU(),
+        #                              nn.Linear(256, 2),
+        #                              models.Normalize())
 
     def forward(self, x):
         features = self.cnn(x)

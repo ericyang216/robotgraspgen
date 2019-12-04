@@ -12,6 +12,9 @@ from tqdm import tqdm
 from nn.cnn import CNNModel
 
 # from Q4_helper import load_dataset, load_training_dataset, load_testing_dataset
+NUM_SAMPLES = 3139
+TRAIN_SAMPLES = 3000
+VAL_SAMPLES = NUM_SAMPLES - TRAIN_SAMPLES
 
 LOAD_MODEL = False
 SAVE_MODEL = True
@@ -32,8 +35,8 @@ else:
 dtype = torch.float32
 
 def load_dataset(start, end):
-    DATA_DIR = "./data/cube/depth"
-    LABEL_DIR = "./data/cube/label"
+    DATA_DIR = "./data/cube2/depth"
+    LABEL_DIR = "./data/cube2/label"
 
     num_images = end - start
 
@@ -86,9 +89,9 @@ def train(model, dataset, evalset):
         # Save model checkpoint and training losses
         if SAVE_MODEL and (i % SAVE_EVERY == 0):
             timestamp = int(time.time())
-            save(model, './checkpoints/cnn_{}_{}'.format(timestamp, i))
-            np.save('./checkpoints/train_loss_{}_{}'.format(timestamp, i), np.array(train_loss))
-            np.save('./checkpoints/eval_loss_{}_{}'.format(timestamp, i), np.array(eval_loss))
+            save(model, './checkpoints/cnn_mini_{}_{}.pt'.format(timestamp, i))
+            np.save('./checkpoints/train_loss_{}_{}.npy'.format(timestamp, i), np.array(train_loss))
+            np.save('./checkpoints/eval_loss_{}_{}.npy'.format(timestamp, i), np.array(eval_loss))
 
     print("Train Losses:")
     for i, loss in enumerate(train_loss):
@@ -129,7 +132,7 @@ if __name__ == "__main__":
     print("=== Loading Testing Data ===")
     # Load test data
     evalset = None
-    images, labels = load_dataset(3000, 4000)
+    images, labels = load_dataset(TRAIN_SAMPLES, NUM_SAMPLES)
     eval_images = torch.from_numpy(images).to(device=device, dtype=dtype)
     eval_labels = torch.from_numpy(labels).to(device=device, dtype=dtype)
     evalset = TensorDataset(eval_images, eval_labels)
@@ -141,7 +144,7 @@ if __name__ == "__main__":
     else:
         print("=== Loading Training Data ===")
         # Load Files
-        images, labels = load_dataset(0, 3000)
+        images, labels = load_dataset(0, TRAIN_SAMPLES)
         
         # Convert to NCHW dimensions
         # images = np.transpose(images, (0,3,1,2))

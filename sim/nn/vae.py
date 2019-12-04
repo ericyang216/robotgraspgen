@@ -6,15 +6,16 @@ import nn.model_utils as models
 import nn.utils as ut
 
 class VAEModel(nn.Module):
-    def __init__(self):
+    def __init__(self, z_dim=32, h_dim=256):
         super(VAEModel, self).__init__()
         self.x_dim = 5      # x, y, z, sin, cos
-        self.y_dim = 256    # cnn features         
-        self.z_dim = 32     # latent variable
+        self.y_dim = 32    # cnn features         
+        self.z_dim = z_dim     # latent variable
 
-        self.dec = Decoder(self.x_dim, self.z_dim, self.y_dim)
-        self.enc = Encoder(self.x_dim, self.z_dim, self.y_dim)
-        self.cnn = models.CNN()
+        self.dec = Decoder(self.x_dim, self.z_dim, self.y_dim, h_dim)
+        self.enc = Encoder(self.x_dim, self.z_dim, self.y_dim, h_dim)
+        # self.cnn = models.CNN()
+        self.cnn = models.MiniCNN()
 
         self.z_prior_m = torch.nn.Parameter(torch.zeros(1), requires_grad=False)
         self.z_prior_v = torch.nn.Parameter(torch.ones(1), requires_grad=False)
@@ -63,7 +64,7 @@ class VAEModel(nn.Module):
             self.z_prior[1].expand(batch, self.z_dim))
 
 class Encoder(nn.Module):
-    def __init__(self, x_dim, z_dim, y_dim, h_dim=300):
+    def __init__(self, x_dim, z_dim, y_dim, h_dim=256):
         super().__init__()
         self.z_dim = z_dim
         self.y_dim = y_dim
@@ -82,7 +83,7 @@ class Encoder(nn.Module):
         return m, v
 
 class Decoder(nn.Module):
-    def __init__(self, x_dim, z_dim, y_dim, h_dim=300):
+    def __init__(self, x_dim, z_dim, y_dim, h_dim=256):
         super().__init__()
         self.z_dim = z_dim
         self.y_dim = y_dim

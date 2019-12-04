@@ -31,6 +31,28 @@ class Normalize(nn.Module):
         norm = torch.sqrt(torch.sum(sq, dim=1)).unsqueeze(-1)
         return input / norm
 
+class MiniCNN(nn.Module):
+    """ CNN feature extractor for depth image 128x128 """
+    def __init__(self):
+        super(MiniCNN, self).__init__()
+        self.net = nn.Sequential(nn.Conv2d(1, 8, 5, stride=2, padding=2),
+                                nn.BatchNorm2d(8),
+                                nn.ReLU(),
+                                nn.MaxPool2d(2),
+                                nn.Conv2d(8, 8, 5, stride=2, padding=2),
+                                nn.BatchNorm2d(8),
+                                nn.ReLU(),
+                                nn.MaxPool2d(2),
+                                nn.Conv2d(8, 8, 5, stride=2, padding=2),
+                                nn.BatchNorm2d(8),
+                                nn.ReLU(),
+                                nn.MaxPool2d(2),
+                                Flatten())
+                                # nn.Linear(1024, 256))
+    
+    def forward(self, x):
+        return self.net(x)
+
 class CNN(nn.Module):
     """ CNN feature extractor for depth image 128x128 """
     def __init__(self):
@@ -50,13 +72,9 @@ class CNN(nn.Module):
                                 nn.Conv2d(16, 16, 3, padding=1),
                                 nn.BatchNorm2d(16),
                                 nn.ReLU(),
+                                nn.MaxPool2d(2),
                                 Flatten(),
-                                nn.Linear(4096, 1024),
-                                nn.ReLU(),
-                                nn.Linear(1024, 512),
-                                nn.ReLU(),
-                                nn.Linear(512, 256),
-                                nn.ReLU())
+                                nn.Linear(1024, 256))
     
     def forward(self, x):
         return self.net(x)

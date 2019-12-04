@@ -43,7 +43,7 @@ for i in range(0, 10):
     #     continue
 
     env = SawyerGrasp(
-        # has_renderer=False,          # no on-screen renderer
+        has_renderer=True,          # no on-screen renderer
         has_offscreen_renderer=True, # off-screen renderer is required for camera observations
         ignore_done=True,            # (optional) never terminates episode
         use_camera_obs=True,         # use camera observations

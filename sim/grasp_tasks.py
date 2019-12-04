@@ -3,6 +3,8 @@ import numpy as np
 import robosuite as suite
 import robosuite.utils.transform_utils as T
 
+RENDER = True
+
 def init_pose(env):
     table_top_center, _ = env._get_table_top_center()
     target_pos = table_top_center + np.array([0, 0, 0.5])
@@ -10,14 +12,17 @@ def init_pose(env):
     move_direction(env, target_pos, right=1, forward=1)
     # point_down(env)
 
-def grasp(env, target_pos, target_angle):
+def grasp(env, target_pos, target_angle, from_table=True):
+    table_top_center, _ = env._get_table_top_center()
+    target_pos = target_pos + table_top_center
+
     move_direction(env, target_pos, right=1, forward=1)
     move_direction(env, target_pos, up=1)
     # point_down(env)
     move_direction(env, target_pos, up=1, grasp=0)
 
-    table_top_center, _ = env._get_table_top_center()
-    move_direction(env, table_top_center + np.array([0, 0, 0.3]), up=1, grasp=0)
+    # table_top_center, _ = env._get_table_top_center()
+    move_direction(env, target_pos + np.array([0, 0, 0.3]), up=1, grasp=0)
 
 def rotate_gripper(env, z=0):
     current_pos = env._right_hand_pos
@@ -48,7 +53,9 @@ def rotate_gripper(env, z=0):
         dpos = np.zeros(3)
         action = np.concatenate([dpos, dquat, [grasp]])
         obs, reward, done, info = env.step(action)
-        env.render()
+
+        if RENDER:
+            env.render()
 
 def point_down(env):
     current_pos = env._right_hand_pos
@@ -74,7 +81,9 @@ def point_down(env):
         dpos = np.zeros(3)
         action = np.concatenate([dpos, dquat, [grasp]])
         obs, reward, done, info = env.step(action)
-        env.render()
+        
+        if RENDER:
+            env.render()
 
 def move_direction(env, target_pos, up=0, right=0, forward=0, grasp=-1):
     mask = np.array([forward, right, up])
@@ -94,4 +103,6 @@ def move_direction(env, target_pos, up=0, right=0, forward=0, grasp=-1):
 
         action = np.concatenate([dpos, dquat, [grasp]])
         obs, reward, done, info = env.step(action)
-        # env.render()
+        
+        if RENDER:
+            env.render()

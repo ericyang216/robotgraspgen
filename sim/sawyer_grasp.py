@@ -15,6 +15,41 @@ from robosuite.models.tasks import TableTopTask, UniformRandomSampler
 GRIPPER_LENGTH = 0.14
 GRIP_CONTACT = 0.02
 
+RGBA = [1, 0, 0, 1]
+FRICTION = 20
+DENSITY = 50
+BOX_TEST_OBJECTS = {
+    'box1' : {
+        'size' : [0.06, 0.012, 0.06], # L, W, H
+        'angle': [np.deg2rad(-5.0)],
+        'x_range': [0.1, 0.1],
+        'y_range': [0.16, 0.16],
+    },
+    'box2' : {
+        'size' : [0.10, 0.012, 0.07],
+        'angle': [np.deg2rad(-10.0)],
+        'x_range': [0.09, 0.09],
+        'y_range': [0.17, 0.17],
+    },
+    'box3' : {
+        'size' : [0.06, 0.012, 0.05],
+        'angle': [np.deg2rad(-20.0)],
+        'x_range': [0.1, 0.1],
+        'y_range': [0.16, 0.16],
+    },
+    'box4' : {
+        'size' : [0.12, 0.012, 0.08],
+        'angle': [np.deg2rad(-35.0)],
+        'x_range': [0.1, 0.1],
+        'y_range': [0.16, 0.16],
+    },
+    'box5' : {
+        'size' : [0.09, 0.012, 0.05],
+        'angle': [np.deg2rad(-40.0)],
+        'x_range': [0.11, 0.11],
+        'y_range': [0.18, 0.18],
+    },
+}        
 class SawyerGrasp(SawyerEnv):
     """
     This class corresponds to the lifting task for the Sawyer robot arm.
@@ -23,7 +58,7 @@ class SawyerGrasp(SawyerEnv):
     def __init__(
         self,
         gripper_type="TwoFingerGripper",
-        table_full_size=(0.8, 0.8, 0.8),
+        table_full_size=(0.8, 0.8, 1.1),
         table_friction=(1., 5e-3, 1e-4),
         use_camera_obs=True,
         use_object_obs=True,
@@ -81,6 +116,7 @@ class SawyerGrasp(SawyerEnv):
             camera_width (int): width of camera frame.
             camera_depth (bool): True if rendering RGB-D, and RGB otherwise.
         """
+        self.target_object = target_object
 
         # settings for table top
         self.table_full_size = table_full_size
@@ -102,14 +138,21 @@ class SawyerGrasp(SawyerEnv):
             #     ensure_object_boundary_in_range=False,
             #     z_rotation=True,
             # )
-            self.placement_initializer = UniformRandomSampler(
-                x_range=[-0.05, 0.05],
-                y_range=[-0.05, 0.05],
-                ensure_object_boundary_in_range=False,
-                z_rotation=None, #None for random
-            )
+            if self.target_object == 'cube':
+                self.placement_initializer = UniformRandomSampler(
+                    x_range=[0.08, 0.12],
+                    y_range=[0.14, 0.18],
+                    ensure_object_boundary_in_range=False,
+                    z_rotation=[-np.pi/4, 0], #None for random
+                )
+            else:
+                self.placement_initializer = UniformRandomSampler(
+                    x_range=BOX_TEST_OBJECTS[self.target_object]['x_range'],
+                    y_range=BOX_TEST_OBJECTS[self.target_object]['y_range'],
+                    ensure_object_boundary_in_range=False,
+                    z_rotation=BOX_TEST_OBJECTS[self.target_object]['angle'], #None for random
+                )
 
-        self.target_object = target_object
         super().__init__(
             gripper_type=gripper_type,
             gripper_visualization=gripper_visualization,
@@ -147,23 +190,33 @@ class SawyerGrasp(SawyerEnv):
 
         # initialize objects of interest
         
-        cube = BoxObject(
-            size_min=[0.015, 0.015, 0.015],  # [0.015, 0.015, 0.015],
-            size_max=[0.040, 0.025, 0.050],  # [0.018, 0.018, 0.018])
-            rgba=[1, 0, 0, 1],
-        )
-        if self.target_object == 'cylinder':
-            cube = CylinderObject(
-                size_min=[0.015, 0.01], 
-                size_max=[0.025, 0.05],  
+        if self.target_object == 'cube':
+            cube = BoxObject(
+                size_min=[0.05, 0.010, 0.05],  # [0.015, 0.015, 0.015],
+                size_max=[0.15, 0.015, 0.08],  # [0.018, 0.018, 0.018])
                 rgba=[1, 0, 0, 1],
+                friction=20,
+                density=50,
             )
-        elif self.target_object == 'ball':
-            cube = BallObject(
-                size_min=[0.01], 
-                size_max=[0.02],  
+        else:
+            cube = BoxObject(
+                size=BOX_TEST_OBJECTS[self.target_object]['size'],
                 rgba=[1, 0, 0, 1],
+                friction=20,
+                density=50,
             )
+        # if self.target_object == 'cylinder':
+        #     cube = CylinderObject(
+        #         size_min=[0.015, 0.01], 
+        #         size_max=[0.025, 0.05],  
+        #         rgba=[1, 0, 0, 1],
+        #     )
+        # elif self.target_object == 'ball':
+        #     cube = BallObject(
+        #         size_min=[0.01], 
+        #         size_max=[0.02],  
+        #         rgba=[1, 0, 0, 1],
+        #     )
 
         self.object = cube
         # if self.target_object == 'can':
@@ -236,6 +289,28 @@ class SawyerGrasp(SawyerEnv):
             grasp_height = grasp_height / 2
 
         pos_gt[2] = grasp_height
+
+        rot_gt = pose[:3, :3]
+        return pos_gt, rot_gt
+
+    def _gen_grasp_gt(self):
+        GRIPPER_LENGTH = 0.15
+        GRIPPER_Y_OFFSET = 0.025
+
+        table_top_center, _ = self._get_table_top_center()
+        pose = self.pose_in_base_from_name('cube')
+        pos = pose[:3, 3]
+
+        pos_gt = pos - table_top_center
+        grasp_height = self.object.get_top_offset()[-1]
+        if len(self.object.size) == 1: #sphere
+            grasp_height = grasp_height / 2
+
+        pos_gt[2] = grasp_height #+ GRIPPER_LENGTH
+        # pos_gt[1] += GRIPPER_Y_OFFSET
+
+        cube_length = self.object.size[0]
+        # pos_gt[0] += np.random.uniform(low=-cube_length/2, high = cube_length/2)
 
         rot_gt = pose[:3, :3]
         return pos_gt, rot_gt
@@ -403,11 +478,12 @@ class SawyerGrasp(SawyerEnv):
         """
         Returns True if task has been completed.
         """
-        cube_height = self.sim.data.body_xpos[self.cube_body_id][2]
+        cube_height = self.object.get_top_offset()[-1]#self.sim.data.body_xpos[self.cube_body_id][2]
         table_height = self.table_full_size[2]
 
         # cube is higher than the table top above a margin
-        return cube_height > table_height + 0.04
+        # return cube_height > table_height + 0.04
+        return self.sim.data.body_xpos[self.cube_body_id][2] > (cube_height + table_height + 0.05)
 
     def _gripper_visualization(self):
         """
