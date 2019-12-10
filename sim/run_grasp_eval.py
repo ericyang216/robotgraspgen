@@ -2,16 +2,15 @@ import pdb
 import cv2
 import math
 import os
+import argparse
 import numpy as np
 import robosuite as suite
 import robosuite.utils.transform_utils as T
 
 from robosuite.wrappers import IKWrapper
-
 from sawyer_grasp import SawyerGrasp
 
 from sim_util import *
-from grasp_tasks import * 
 
 import matplotlib.pyplot as plt
 import matplotlib.style
@@ -32,37 +31,28 @@ CAM_ID = 2 # 0 front view, 1 bird view, 2 agent view
 DEPTH_DIR = './data/cube2/depth/'
 LABEL_DIR = './data/cube2/label/'
 
-TEST_NAMES = ['box5']#, 'box2', 'box3', 'box4', 'box5']
-METHOD = 'cnn' #baseline, base+noise, cnn, vae
-TRIALS = 20
+parser = argparse.ArgumentParser()
+parser.add_argument('--method', type=int, help='method name')
+parser.add_argument('--tests', type=int, action='append', help='test names')
+args = parser.parse_args()
 
-"""
-1. Select 5 boxes and positions
-2  Run baseline w/ noise many times on each box to get set of successful grasps
-3. Evaluate success for 5 items, 10 trials per: baseline, baseline w/ noise, cnn, vae
-   Measure the generated target pos and target angle
-4. Run models on each of objects and measure the "coverage rate" from (2)
-
-5. Study on VAE latent dimensions? 8, 16, 32, 64 h_dim?
-"""
+TEST_NAMES = args.tests
+METHOD = args.method
+TRIALS = 50
 
 if 'cnn' in METHOD:
-    CNN_MODEL_PATH = './checkpoints2/cnn_1575995623_500.pt' #./checkpoints/cnn_mini_1575429484_900.pt' #cnn_1575397023_900.pt'
-    cnn_model = CNNModel()
+    CNN_MODEL_PATH = './checkpoints2/{}_500.pt'.format(METHOD)
+    h_dim = int(METHOD.split('_')[2][1:])
+    cnn_model = CNNModel(h_dim=h_dim)
     cnn_model.load_state_dict(torch.load(CNN_MODEL_PATH))
     cnn_model.eval()
 
 if 'vae' in METHOD:
-    VAE_MODEL_PATH = './checkpoints2/vae_1575997331_z4_h32_1000.pt'
-    #'./checkpoints/vae_mini_1575422961_z16_h16_900.pt'
-    #'./checkpoints/vae_mini_1575595272_z128_h16_900.pt'
-    #'./checkpoints/vae_mini_1575586849_z64_h16_900.pt'
-    #'./checkpoints/vae_mini_1575586455_z32_h16_900.pt'
-    #'./checkpoints/vae_mini_1575422961_z16_h16_900.pt'
-    #'./checkpoints/vae_mini_1575587244_z8_h16_900.pt'
-    #'./checkpoints/vae_mini_1575587840_z4_h16_900.pt'
-    #'./checkpoints/vae_mini_1575422961_z16_h16_900.pt'
-    vae_model = VAEModel(z_dim=4, h_dim=32)
+    VAE_MODEL_PATH = './checkpoints2/{}_500.pt'.format(METHOD)
+    z_dim = int(METHOD.split('_')[1][1:])
+    h_dim = int(METHOD.split('_')[2][1:])
+
+    vae_model = VAEModel(z_dim=z_dim, h_dim=h_dim)
     vae_model.load_state_dict(torch.load(VAE_MODEL_PATH))
     vae_model.eval()
 
@@ -100,6 +90,21 @@ def nn_grasp(model, depth):
     target_pos = output[0:3]
     target_angle = np.arctan2(output[3], output[4])
     return target_pos, target_angle
+
+def get_roi(env):
+    obs = env._get_observation()
+
+    depth = obs['depth']
+    depth = cv2.flip(depth, 0)
+    
+    W_2, H_2 = int(depth.shape[0] / 2), int(depth.shape[0] / 2)
+    crop = 64
+    start_H = W_2-crop
+    end_H = W_2+crop
+    start_W = H_2-crop
+    end_W = H_2+crop
+    roi = depth[start_H:end_H, start_W:end_W]
+    return roi
 
 if RENDER == False:
     dummy = SawyerGrasp(
@@ -149,21 +154,9 @@ for TEST_NAME in TEST_NAMES:
 
         env.set_robot_joint_positions(np.array([0,-math.pi/2,0,math.pi/2,0,math.pi/2,math.pi/2]))
 
-        obs = env._get_observation()
-
-        depth = obs['depth']
-        depth = cv2.flip(depth, 0)
-        
-        W_2, H_2 = int(depth.shape[0] / 2), int(depth.shape[0] / 2)
-        crop = 64
-        start_H = W_2-crop
-        end_H = W_2+crop
-        start_W = H_2-crop
-        end_W = H_2+crop
-        roi = depth[start_H:end_H, start_W:end_W]
-
-        img = roi / np.max(roi) * 255
-        cv2.imwrite('depth_{}.png'.format(TEST_NAME), img)
+        roi = get_roi(env)
+        # img = roi / np.max(roi) * 255
+        # cv2.imwrite('depth_{}.png'.format(TEST_NAME), img)
 
         table_top_center, _ = env._get_table_top_center()
 
@@ -333,9 +326,9 @@ for TEST_NAME in TEST_NAMES:
     print(pos_results)
     print(angle_results)
 
-    # result_path = './results/' + TEST_NAME + '_' + METHOD + '_%s.npy'
-    # np.save(result_path % 'success', np.array(success_results))
-    # np.save(result_path % 'pos', np.array(pos_results))
-    # np.save(result_path % 'angle', np.array(angle_results))
-    # np.save(result_path % 'pos_obs', np.array(pos_obs_results))
-    # np.save(result_path % 'orn_obs', np.array(orn_obs_results))
+    result_path = './results2/' + TEST_NAME + '_' + METHOD + '_%s.npy'
+    np.save(result_path % 'success', np.array(success_results))
+    np.save(result_path % 'pos', np.array(pos_results))
+    np.save(result_path % 'angle', np.array(angle_results))
+    np.save(result_path % 'pos_obs', np.array(pos_obs_results))
+    np.save(result_path % 'orn_obs', np.array(orn_obs_results))

@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, TensorDataset
-
+import argparse
 import os
 import cv2
 import time
@@ -12,13 +12,11 @@ from tqdm import tqdm
 from nn.vae import VAEModel
 from nn.model_utils import AngleLoss, DistanceLoss
 
-# from Q4_helper import load_dataset, load_training_dataset, load_testing_dataset
+Z_DIM = 4 # 32, 256, 512
+H_DIM = 32 # 128, 256, 512
 
-Z_DIM = 16 # 32, 256, 512
-H_DIM = 16 # 128, 256, 512
-
-NUM_SAMPLES = 3806
-TRAIN_SAMPLES = 3500
+NUM_SAMPLES = 7183
+TRAIN_SAMPLES = 7000
 VAL_SAMPLES = NUM_SAMPLES - TRAIN_SAMPLES
 
 LOAD_MODEL = False
@@ -26,10 +24,10 @@ SAVE_MODEL = True
 roi_H = 128
 roi_W = 128
 
-BATCH = 64
-LR = 1e-4
-ANGLE_LOSS_K = 100.
-EPOCHS = 1000
+BATCH = 128
+LR = 1e-3
+ANGLE_LOSS_K = 1 #100.
+EPOCHS = 500
 SAVE_EVERY = 100
 
 if torch.cuda.is_available():
@@ -54,15 +52,15 @@ def load_dataset(start, end):
         labels[i] = label
     return images, labels
 
-def train_one_epoch(model, dataloader, optimizer):
+def train_one_epoch(model, dataloader, optimizer, kl_scale=1.0):
     total_loss = torch.tensor(0.0, device=device, requires_grad=False)
 
     for img, label in dataloader:
         optimizer.zero_grad()
 
-        nelbo, kl, rec = model.loss(img, label)
+        nelbo, kl, rec = model.loss(img, label, k_angle=ANGLE_LOSS_K)
         
-        loss = nelbo
+        loss = rec + kl_scale * kl
         
         loss.backward()
 
@@ -81,22 +79,27 @@ def train(model, dataset, evalset):
     dataloader = DataLoader(dataset, batch_size=BATCH, shuffle=True)
     print("Total Training Batches: {}".format(len(dataloader)))
 
-    for i in range(EPOCHS):
+    kl_scale = 0.1
+    KL_SCALE_EVERY = 50
+    for i in range(1, EPOCHS+1):
         model.train()
-        train_loss_epoch = train_one_epoch(model, dataloader, optimizer)
+        train_loss_epoch = train_one_epoch(model, dataloader, optimizer, kl_scale=kl_scale)
         train_loss.append(train_loss_epoch)
 
         eval_loss_epoch = evaluate(model, evalset)
         eval_loss.append(eval_loss_epoch)
 
-        print("Epoch {}: Train {}, Eval {}".format(i, train_loss[i], eval_loss[i]))
+        print("Epoch {}: Train {}, Eval {}".format(i, train_loss_epoch, eval_loss_epoch))
 
         # Save model checkpoint and training losses
         if SAVE_MODEL and (i % SAVE_EVERY == 0):
-            timestamp = int(time.time())
-            save(model, './checkpoints/vae_mini_{}_z{}_h{}_{}.pt'.format(timestamp, Z_DIM, H_DIM, i))
-            np.save('./checkpoints/train_loss_{}_{}.npy'.format(timestamp, i), np.array(train_loss))
-            np.save('./checkpoints/eval_loss_{}_{}.npy'.format(timestamp, i), np.array(eval_loss))
+            # timestamp = int(time.time())
+            save(model, './checkpoints2/{}_{}.pt'.format(model.name,i))
+            np.save('./checkpoints2/{}_train_loss.npy'.format(model.name), np.array(train_loss))
+            np.save('./checkpoints2/{}_eval_loss.npy'.format(model.name), np.array(eval_loss))
+        
+        if (i % KL_SCALE_EVERY == 0):
+            kl_scale *= 2
 
     print("Train Losses:")
     for i, loss in enumerate(train_loss):
@@ -128,9 +131,13 @@ def evaluate(model, dataset):
     return total_loss.cpu().item() / len(dataloader)
 
 if __name__ == "__main__":
-   
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--h_dim', type=int, default=H_DIM, help='size of hidden layers in FC')
+    parser.add_argument('--z_dim', type=int, default=Z_DIM, help='size of latent variable in VAE')
+    args = parser.parse_args()
+    
     print("=== Creating Model ===")
-    model = VAEModel(z_dim=Z_DIM, h_dim=H_DIM)
+    model = VAEModel(z_dim=args.z_dim, h_dim=args.h_dim)
     model.to(device)
 
     print("=== Loading Testing Data ===")

@@ -9,10 +9,11 @@ import numpy as np
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 
-from nn.cnn import CNNModel
+from nn.gan import GANModel
+from nn.model_utils import AngleLoss, DistanceLoss
 
-Z_DIM = 0
-H_DIM = 32
+Z_DIM = 4 # 32, 256, 512
+H_DIM = 32 # 128, 256, 512
 
 NUM_SAMPLES = 7183
 TRAIN_SAMPLES = 7000
@@ -51,36 +52,36 @@ def load_dataset(start, end):
         labels[i] = label
     return images, labels
 
-def train_one_epoch(model, dataloader, optimizer):
-    total_loss = torch.tensor(0.0, device=device, requires_grad=False)
+def train_one_epoch(model, dataloader, d_optimizer, g_optimizer):
+    total_loss = 0 #torch.tensor(0.0, device=device, requires_grad=False)
 
     for img, label in dataloader:
-        optimizer.zero_grad()
-
-        output = model(img)
-        dist_loss, ang_loss = model.loss(output, label)
+        d_loss, g_loss = model.loss(img, label)
         
-        loss = dist_loss + ANGLE_LOSS_K * ang_loss
+        d_optimizer.zero_grad()
+        d_loss.backward(retain_graph=True)
+        d_optimizer.step()
         
-        loss.backward()
-        optimizer.step()
+        g_optimizer.zero_grad()
+        g_loss.backward()
+        g_optimizer.step()
 
-        total_loss += loss
+        total_loss += g_loss.cpu().item()
 
-    return total_loss.cpu().item() / len(dataloader)
+    return total_loss / len(dataloader)
 
 def train(model, dataset, evalset):
     train_loss = []
     eval_loss = []
 
-    optimizer = torch.optim.Adam(model.parameters(), lr=LR)
-
+    d_optimizer = torch.optim.Adam(model.D.parameters(), lr=LR, betas=(0.5, 0.999))
+    g_optimizer = torch.optim.Adam(model.G.parameters(), lr=LR, betas=(0.5, 0.999))
     dataloader = DataLoader(dataset, batch_size=BATCH, shuffle=True)
     print("Total Training Batches: {}".format(len(dataloader)))
 
     for i in range(1, EPOCHS+1):
         model.train()
-        train_loss_epoch = train_one_epoch(model, dataloader, optimizer)
+        train_loss_epoch = train_one_epoch(model, dataloader, d_optimizer, g_optimizer)
         train_loss.append(train_loss_epoch)
 
         eval_loss_epoch = evaluate(model, evalset)
@@ -117,9 +118,8 @@ def evaluate(model, dataset):
         for img, label in dataloader:
 
             output = model(img)
-            dist_loss, ang_loss = model.loss(output, label)
 
-            loss = dist_loss + ANGLE_LOSS_K * ang_loss
+            loss = DistanceLoss(output, label) + ANGLE_LOSS_K * AngleLoss(output, label, norm=True)
 
             total_loss += loss
 
@@ -128,10 +128,11 @@ def evaluate(model, dataset):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--h_dim', type=int, default=H_DIM, help='size of hidden layers in FC')
+    parser.add_argument('--z_dim', type=int, default=Z_DIM, help='size of latent variable in VAE')
     args = parser.parse_args()
-
+    
     print("=== Creating Model ===")
-    model = CNNModel(h_dim=args.h_dim)
+    model = GANModel(args.z_dim, args.h_dim)
     model.to(device)
 
     print("=== Loading Testing Data ===")

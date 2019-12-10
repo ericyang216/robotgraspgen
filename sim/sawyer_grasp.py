@@ -13,7 +13,7 @@ from robosuite.models.robots import Sawyer
 from robosuite.models.tasks import TableTopTask, UniformRandomSampler
 
 GRIPPER_LENGTH = 0.14
-GRIP_CONTACT = 0.02
+GRIP_CONTACT = 0.021
 
 RGBA = [1, 0, 0, 1]
 FRICTION = 20

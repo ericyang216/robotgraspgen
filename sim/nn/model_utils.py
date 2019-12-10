@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import numpy as np
 
-def AngleLoss(a, b, norm=False):
+def AngleLossCos(a, b, norm=False):
     """ a is prediction """
     A = a[:, 3:]
     B = b[:, 3:]
@@ -11,6 +11,19 @@ def AngleLoss(a, b, norm=False):
     cos_loss = 1. - ((A[:, 1] * B[:, 1]) + (A[:, 0] * B[:, 0]))
     cos_loss = torch.mean(cos_loss, dim=0)
     return cos_loss
+
+def AngleLoss(a, b, norm=False):
+    """ a is prediction """
+    A = a[:, 3:]
+    B = b[:, 3:]
+    if norm:
+        A = normalize_F(A)
+
+    angle_A = torch.atan2(A[:, 1], A[:, 0])
+    angle_B = torch.atan2(B[:, 1], B[:, 0])
+
+    angle_loss = torch.mean(torch.abs(angle_A - angle_B), dim=0)
+    return angle_loss
 
 def DistanceLoss(a, b):
     mse_loss = torch.mean(torch.sum(torch.abs(a[:, 0:3] - b[:, 0:3]), dim=1), dim=0)
