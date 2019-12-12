@@ -36,16 +36,27 @@ for i in range(NUM_DATA):
 
 all_labels = np.array(all_labels)
 
-angle_mask = all_labels[:, 3] > -45
+angle_mask = all_labels[:, 5] > 0
 
 
-plt.scatter(all_labels[:, 0][angle_mask], all_labels[:, 1][angle_mask], c='b', alpha=0.1)
-plt.scatter(all_labels[:, 7][angle_mask], all_labels[:, 8][angle_mask], c='r', alpha=0.1)
+# plt.scatter(all_labels[:, 0][angle_mask], all_labels[:, 1][angle_mask], c='b', alpha=0.1)
+# plt.scatter(all_labels[:, 7][angle_mask], all_labels[:, 8][angle_mask], c='r', alpha=0.1)
+# plt.xlim([-0.02, 0.18])
+# plt.ylim([0, 0.24])
+# plt.xlabel('x (m)')
+# plt.ylabel('y (m)')
+# plt.show()
 
+results, edges = np.histogram(all_labels[:, 2][angle_mask], density=True)
+binWidth = edges[1] - edges[0]
+plt.bar(edges[:-1], results*binWidth, binWidth)
+plt.xlabel('Grasp Height z (m)')
+plt.ylabel('% of data')
 plt.show()
 
-plt.hist(all_labels[:, 2][angle_mask], alpha=0.5)
-plt.show()
-
-plt.hist(all_labels[:, 3][angle_mask], alpha=0.5)
+results, edges = np.histogram(all_labels[:, 3][angle_mask], density=True)
+binWidth = edges[1] - edges[0]
+plt.bar(edges[:-1], results*binWidth, binWidth)
+plt.xlabel('Grasp Angle (deg)')
+plt.ylabel('% of data')
 plt.show()

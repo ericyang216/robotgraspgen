@@ -20,6 +20,7 @@ mpl.style.use('seaborn-muted')
 import torch
 from nn.vae import VAEModel
 from nn.cnn import CNNModel
+from nn.gan import GANModel
 
 RENDER = False
 OBS = True
@@ -32,13 +33,13 @@ DEPTH_DIR = './data/cube2/depth/'
 LABEL_DIR = './data/cube2/label/'
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--method', type=int, help='method name')
-parser.add_argument('--tests', type=int, action='append', help='test names')
+parser.add_argument('--method', type=str, help='method name')
+parser.add_argument('--tests', type=str, action='append', help='test names')
 args = parser.parse_args()
 
 TEST_NAMES = args.tests
 METHOD = args.method
-TRIALS = 50
+TRIALS = 25
 
 if 'cnn' in METHOD:
     CNN_MODEL_PATH = './checkpoints2/{}_500.pt'.format(METHOD)
@@ -55,6 +56,15 @@ if 'vae' in METHOD:
     vae_model = VAEModel(z_dim=z_dim, h_dim=h_dim)
     vae_model.load_state_dict(torch.load(VAE_MODEL_PATH))
     vae_model.eval()
+
+if 'gan' in METHOD:
+    GAN_MODEL_PATH = './checkpoints2/{}_500.pt'.format(METHOD)
+    z_dim = int(METHOD.split('_')[1][1:])
+    h_dim = int(METHOD.split('_')[2][1:])
+
+    gan_model = GANModel(z_dim=z_dim, h_dim=h_dim)
+    gan_model.load_state_dict(torch.load(GAN_MODEL_PATH))
+    gan_model.eval()
 
 def baseline_grasp(env, noise=False):
     target_pos, target_angle = env._gen_grasp_gt() #x,y,z,a
@@ -168,6 +178,8 @@ for TEST_NAME in TEST_NAMES:
             target_pos, target_angle = nn_grasp(cnn_model, roi)
         elif 'vae' in METHOD:
             target_pos, target_angle = nn_grasp(vae_model, roi)
+        elif 'gan' in METHOD:
+            target_pos, target_angle = nn_grasp(gan_model, roi)
         else:
             raise NotImplementedError
     
