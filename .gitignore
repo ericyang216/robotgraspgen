@@ -3,7 +3,7 @@ shapenet_pc/
 ycb/
 checkpoints/
 sim/data/
-sim/checkpoints
+sim/checkpoints*
 *.png
 *.npy
 *.pyc
